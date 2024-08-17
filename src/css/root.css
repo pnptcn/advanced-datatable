@@ -1,0 +1,62 @@
+:root {
+    /* Font Sizes */
+    --unit: 1rem;
+    --xl: calc(var(--unit) * 4);
+    --lg: calc(var(--unit) * 2);
+    --md: calc(var(--unit) / 2);
+    --sm: calc(var(--unit) / 4);
+
+    /* Color Palette */
+    --white: hsl(0, 0%, 100%);
+    --background: hsl(228, 20%, 95%);
+    --subtle: hsl(228, 20%, 90%);
+    --muted: hsl(228, 20%, 75%);
+    --foreground: hsl(228, 20%, 20%);
+    --brand: hsl(270, 100%, 50%);
+    --success: hsl(120, 60%, 60%);
+    --warning: hsl(45, 85%, 60%);
+    --error: hsl(0, 80%, 60%);
+
+    --glass: rgba(255, 255, 255, 0.2);
+    --blur: blur(xl);
+
+    --gradient: linear-gradient(to bottom, rgba(255, 255, 255, 0.15) 0%, rgba(0, 0, 0, 0.15) 100%),
+        radial-gradient(at top center, rgba(255, 255, 255, 0.4) 0%, rgba(0, 0, 0, 0.4) 120%) #989898;
+
+    /* Shadows and Borders */
+    --shadow: rgba(0, 0, 0, 0.1) 0px 2px 5px;
+    --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    --radius: var(--unit);
+    --border: 2px solid var(--muted);
+    --dashed: 2px dashed var(--muted);
+    --outline: 1px solid rgba(255, 255, 255, 0.3);
+
+    /* Transitions */
+    --transition-default: all 0.3s ease-in-out;
+}
+
+html,
+body {
+    font-family: "Noto Sans", sans-serif;
+    font-size: var(--unit);
+}
+
+@keyframes pulse-triangle {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.7;
+    }
+}
+
+@keyframes pulse-background {
+    0%, 100% {
+        background-color: rgba(255, 165, 0, 0.1);
+    }
+    50% {
+        background-color: rgba(255, 165, 0, 0.3);
+    }
+}

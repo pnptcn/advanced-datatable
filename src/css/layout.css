@@ -1,0 +1,36 @@
+body {
+    background: var(--gradient);
+    background-blend-mode: multiply, multiply;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "header header"
+        "aside main";
+    width: 100vw;
+    height: 100vh;
+}
+
+header {
+    grid-area: header;
+    background: var(--subtle);
+}
+
+aside {
+    grid-area: aside;
+    background: var(--subtle);
+}
+
+main {
+    grid-area: main;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: auto;
+    width: 100%;
+    height: 100%;
+}

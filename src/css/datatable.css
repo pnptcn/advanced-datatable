@@ -1,0 +1,100 @@
+/* Styles for the table and warning indicators */
+data-table::part(datatable) {
+    width: 100%;
+    background: var(--white);
+    border-radius: var(--border-radius);
+    border-spacing: 0;
+    text-align: left;
+    overflow-y: auto;
+}
+
+data-table::part(thead) {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--subtle);
+}
+
+data-table::part(table) {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+data-table::part(th),
+data-table::part(td) {
+    padding: var(--sm);
+    border-bottom: 1px solid var(--muted);
+    font-size: var(--md);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0;
+}
+
+data-table::part(th) {
+    background: var(--subtle);
+    text-transform: uppercase;
+}
+
+data-table::part(th) div {
+    margin-top: var(--sm);
+}
+
+data-table::part(td) {
+    padding: var(--md);
+    border-bottom: 1px solid var(--muted);
+}
+
+data-table::part(missing) {
+    background: rgba(255, 165, 0, 0.2);
+}
+
+data-table::part(tr):nth-child(even) {
+    background: var(--background);
+}
+
+data-table::part(tr):hover {
+    background: var(--muted);
+}
+
+data-table::part(dl) {
+    display: flex;
+    flex-flow: row wrap;
+    align-items: center;
+}
+
+data-table::part(dt) {
+    flex-basis: 20%;
+    padding: var(--xs);
+    text-align: left;
+}
+
+data-table::part(dd) {
+    flex-basis: 70%;
+    flex-grow: 1;
+    margin: 0;
+    padding: var(--xs);
+    text-align: right;
+}
+
+data-table::part(select) {
+    font-size: var(--md);
+}
+
+data-table::part(warning-triangle) {
+    color: var(--warning);
+    margin-left: 5px;
+    font-size: 0.9rem;
+    animation-duration: 1.5s;
+    animation-name: pulse-triangle;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
+
+
+data-table::part(td.missing) {
+    animation-duration: 1.5s;
+    animation-name: pulse-background;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+}
