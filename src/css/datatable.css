@@ -1,4 +1,3 @@
-/* Styles for the table and warning indicators */
 data-table::part(datatable) {
     width: 100%;
     background: var(--white);
@@ -86,15 +85,15 @@ data-table::part(warning-triangle) {
     margin-left: 5px;
     font-size: 0.9rem;
     animation-duration: 1.5s;
-    animation-name: pulse-triangle;
+    animation-name: sonar;
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
 }
 
 
-data-table::part(td.missing) {
+data-table::part(missing) {
     animation-duration: 1.5s;
-    animation-name: pulse-background;
+    animation-name: sonar;
     animation-timing-function: ease-in-out;
     animation-iteration-count: infinite;
 }

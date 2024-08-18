@@ -1,7 +1,20 @@
 import * as THREE from 'three';
-import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
-import { nodeConfigs } from './config';
-import { TextField } from "./textfield"
+import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+import { ForceDirectedLayout } from "./layouts/forcedirected"
+import { CircularLayout } from './layouts/circular';
+import { HierarchicalLayout } from './layouts/hierachical';
+
+const graphData = {
+    "nodes": [
+        { "id": "node1", "label": "Node 1", "position": { "x": -200, "y": 100, "z": 0 }, "type": "basicNode" },
+        { "id": "node2", "label": "Node 2", "position": { "x": 200, "y": 100, "z": 0 }, "type": "basicNode" },
+        { "id": "node3", "label": "Node 3", "position": { "x": 0, "y": -150, "z": 0 }, "type": "basicNode" }
+    ],
+    "edges": [
+        { "source": "node1", "target": "node2" },
+        { "source": "node1", "target": "node3" }
+    ]
+};
 
 class NodeGraphEditor extends HTMLElement {
     private scene: THREE.Scene;
@@ -30,6 +43,7 @@ class NodeGraphEditor extends HTMLElement {
         window.addEventListener('pointermove', this.onPointerMove.bind(this));
         window.addEventListener('pointerdown', this.onPointerDown.bind(this));
         window.addEventListener('pointerup', this.onPointerUp.bind(this));
+        window.addEventListener('keydown', this.onKeyDown.bind(this));
 
         const addNodeButton = document.getElementById('addNodeButton');
         if (addNodeButton) {
@@ -42,6 +56,7 @@ class NodeGraphEditor extends HTMLElement {
         window.removeEventListener('pointermove', this.onPointerMove.bind(this));
         window.removeEventListener('pointerdown', this.onPointerDown.bind(this));
         window.removeEventListener('pointerup', this.onPointerUp.bind(this));
+        window.removeEventListener('keydown', this.onKeyDown.bind(this));
     }
 
     init() {
@@ -51,15 +66,88 @@ class NodeGraphEditor extends HTMLElement {
         this.setupLighting();
         this.setupControls();
 
-        // Initialize the root group that holds all nodes and edges
         this.root = new THREE.Group();
         this.scene.add(this.root);
 
-        this.createNodes();
         this.animate();
     }
 
-    onWindowResize() { }
+    loadGraphFromJSON(graphData: any) {
+        // Clear any existing nodes and edges
+        this.nodes.forEach(node => this.root.remove(node));
+        this.edges.forEach(edge => this.root.remove(edge));
+        this.nodes = [];
+        this.edges = [];
+    
+        // Map to store nodes by ID for quick access
+        const nodeMap: Map<string, THREE.Group> = new Map();
+    
+        // Create nodes
+        graphData.nodes.forEach((nodeData: any) => {
+            const position = new THREE.Vector3(nodeData.position.x, nodeData.position.y, nodeData.position.z);
+            const node = this.createNode(position, nodeData.label, nodeData.type);
+            this.root.add(node);
+            this.nodes.push(node);
+            nodeMap.set(nodeData.id, node); // Store node in map by its ID
+        });
+    
+        // Create edges based on the connections
+        graphData.edges.forEach((edgeData: any) => {
+            const sourceNode = nodeMap.get(edgeData.source);
+            const targetNode = nodeMap.get(edgeData.target);
+    
+            if (sourceNode && targetNode) {
+                const edge = this.create3DEdge(sourceNode, targetNode);
+                if (edge) {
+                    this.root.add(edge);
+                    this.edges.push(edge);
+                }
+            }
+        });
+
+        this.runLayout()
+    }
+
+    runLayout() {
+        // const layout = new ForceDirectedLayout(this.nodes, this.edges);
+        // const layout = new CircularLayout(this.nodes, this.edges)
+        const layout = new HierarchicalLayout(this.nodes, this.edges)
+        layout.calculateLayout();
+        layout.animateLayout(3000, () => this.render());
+    }
+
+    onKeyDown(event: KeyboardEvent) {
+        console.log(event)
+        let layout
+
+        switch (event.key) {
+            case '1':
+                layout = new HierarchicalLayout(this.nodes, this.edges)
+                break;
+            case '2':
+                layout = new CircularLayout(this.nodes, this.edges)
+                break;
+            case '3':
+                layout = new ForceDirectedLayout(this.nodes, this.edges)
+                break;
+            default:
+                break;
+        }
+
+        layout?.calculateLayout();
+        layout?.animateLayout(3000, () => this.render());
+    }
+
+    onWindowResize() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+
+        this.renderer.setSize(width, height);
+        this.labelRenderer.setSize(width, height);
+    }
 
     setupScene() {
         this.scene = new THREE.Scene();
@@ -76,14 +164,14 @@ class NodeGraphEditor extends HTMLElement {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.shadowMap.enabled = true; // Enable shadows
-        this.shadowRoot.appendChild(this.renderer.domElement);
+        this.shadowRoot?.appendChild(this.renderer.domElement);
 
         this.labelRenderer = new CSS2DRenderer();
         this.labelRenderer.setSize(window.innerWidth, window.innerHeight);
         this.labelRenderer.domElement.style.position = 'absolute';
         this.labelRenderer.domElement.style.top = '0px';
         this.labelRenderer.domElement.style.pointerEvents = 'none';
-        this.shadowRoot.appendChild(this.labelRenderer.domElement);
+        this.shadowRoot?.appendChild(this.labelRenderer.domElement);
     }
 
     createGridFloor() {
@@ -117,27 +205,10 @@ class NodeGraphEditor extends HTMLElement {
     setupControls() {
         // Adding zoom support with mouse wheel
         window.addEventListener('wheel', (event) => {
-            this.camera.position.z += event.deltaY * 0.1; // Adjust zoom sensitivity
+            this.camera.position.z += event.deltaY * 0.5; // Adjust zoom sensitivity
             this.camera.position.z = Math.max(200, Math.min(3000, this.camera.position.z)); // Clamp zoom levels
         });
     }    
-
-    createNodes() {
-        // Create Node 1
-        const node1 = this.createNode(new THREE.Vector3(-400, 0, 0), 'Node 1', 'basicNode');
-        this.root.add(node1);
-        this.nodes.push(node1);
-
-        // Create Node 2
-        const node2 = this.createNode(new THREE.Vector3(400, 0, 0), 'Node 2', 'basicNode');
-        this.root.add(node2);
-        this.nodes.push(node2);
-
-        // Create a connecting edge between Node 1's output port and Node 2's input port
-        const edge = this.create3DEdge(node1, node2);
-        this.root.add(edge);
-        this.edges.push(edge);
-    }
 
     createNode(position: THREE.Vector3, label: string, configKey: string): THREE.Group {
         const nodeGroup = new THREE.Group();
@@ -183,7 +254,7 @@ class NodeGraphEditor extends HTMLElement {
 
         // Increase port size slightly for easier interaction
         const portGeometry = new THREE.SphereGeometry(8, 16, 16); // Increased size for better interaction
-        const portMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        const portMaterial = new THREE.MeshPhongMaterial({ color: 0xff7e62 });
 
         const inputPort = new THREE.Mesh(portGeometry, portMaterial);
         inputPort.position.set(-canvasWidth / 2 - 20, 0, 0);
@@ -210,7 +281,7 @@ class NodeGraphEditor extends HTMLElement {
 
     createTemporaryEdge(startPort: THREE.Mesh): THREE.Line {
         const material = new THREE.LineBasicMaterial({ color: 0x00aaff });
-        const startPosition = startPort.getWorldPosition(new THREE.Vector3()); // Start from the port’s world position
+        const startPosition = startPort.getWorldPosition(new THREE.Vector3()); // Start from the port's world position
     
         // Initialize the edge with the same start and end position
         const points = [startPosition.clone(), startPosition.clone()];
@@ -235,7 +306,7 @@ class NodeGraphEditor extends HTMLElement {
         const curve = new THREE.CatmullRomCurve3([start, end]);
         const tubeGeometry = new THREE.TubeGeometry(curve, 20, 5, 8, false);
         const material = new THREE.MeshPhongMaterial({
-            color: 0x00aaff,
+            color: 0xeaeaea,
             transparent: true,
             opacity: 0.6,
         });
@@ -294,7 +365,9 @@ class NodeGraphEditor extends HTMLElement {
     
             // Update the end position of the temporary edge
             const positions = (this.currentEdge.geometry as THREE.BufferGeometry).attributes.position.array as Float32Array;
-            const start = this.startPort.getWorldPosition(new THREE.Vector3());
+            const start = this.startPort?.getWorldPosition(new THREE.Vector3());
+
+            if (!start) return;
     
             positions[0] = start.x;
             positions[1] = start.y;
@@ -347,10 +420,11 @@ class NodeGraphEditor extends HTMLElement {
                 const intersectedObject = intersects[0].object;
                 if (intersectedObject.userData.isPort && intersectedObject !== this.startPort) {
                     const endPort = intersectedObject as THREE.Mesh;
-                    const newEdge = this.create3DEdge(this.startPort.parent as THREE.Group, endPort.parent as THREE.Group);
+                    const newEdge = this.create3DEdge(this.startPort?.parent as THREE.Group, endPort.parent as THREE.Group);
                     if (newEdge) {
                         this.root.add(newEdge);
                         this.edges.push(newEdge);
+                        this.runLayout()
                     }
                 }
             }

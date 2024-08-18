@@ -4,13 +4,4 @@
 @import url("./upload.css");
 @import url("./search.css");
 @import url("./datatable.css");
-@import url("./nodegraph.css")
-
-/* Search Overlay */
-#search-overlay {
-    background: var(--background);
-    padding: var(--unit);
-    border-radius: var(--border-radius);
-    box-shadow: var(--shadow);
-    transition: var(--transition-default);
-}
+@import url("./nodegraph.css");

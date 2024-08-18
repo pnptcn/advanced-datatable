@@ -3,6 +3,7 @@
 import * as echarts from 'echarts';
 import { table, Table as ArqueroTable } from 'arquero';
 import { Messaging } from './messaging/component';
+import { ArtifactFactory } from './artifact';
 
 const sanitizeHeader = (header: string): string => {
     return header.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-_]/g, '').toLowerCase();
@@ -17,6 +18,13 @@ class DataTableComponent extends HTMLElement {
     private tbody: HTMLTableSectionElement;
     private originalHeaders: string[] = [];
     private sanitizedHeaders: string[] = [];
+    private msgFactories: Record<string, () => typeof ArtifactFactory> = {
+        "register": ArtifactFactory({
+            identity: "datatable",
+            channel: "command",
+            type: "text/plain"
+        })
+    }
 
     constructor() {
         super();
@@ -50,7 +58,7 @@ class DataTableComponent extends HTMLElement {
     }
 
     setupMessaging() {
-        Messaging().subscribe("data", this.messagingChannel.port2);
+        Messaging().subscribe("datatable", "command", this.messagingChannel.port2);
         this.port.onmessage = (event) => {
             this.handleMessage(event.data);
         };
@@ -193,7 +201,10 @@ class DataTableComponent extends HTMLElement {
     
             const option = {
                 tooltip: {
-                    confine: true
+                    confine: true,
+                    textStyle: {
+                        fontSize: 10
+                    }
                 },
                 xAxis: {
                     type: 'category',
