@@ -3,6 +3,7 @@
 ### Component Structure
 
 ```mermaid
+%%{init: {"flowchart": {"defaultRenderer": "elk"}} }%%
 classDiagram
     class App {
         +initialize()
@@ -72,6 +73,7 @@ classDiagram
 ### Messaging Flow
 
 ```mermaid
+%%{init: {"flowchart": {"defaultRenderer": "elk"}} }%%
 sequenceDiagram
     participant App
     participant UploadComponent
@@ -103,6 +105,7 @@ sequenceDiagram
 ### Data Processing Pipeline
 
 ```mermaid
+%%{init: {"flowchart": {"defaultRenderer": "elk"}} }%%
 graph TD
     A[File Input] -->|CSV| B(UploadComponent)
     B -->|Parse CSV| C{Papa Parse}
@@ -123,6 +126,7 @@ graph TD
 ### Artifact Structure and Flow
 
 ```mermaid
+%%{init: {"flowchart": {"defaultRenderer": "elk"}} }%%
 classDiagram
     class Artifact {
         +uuid: string
