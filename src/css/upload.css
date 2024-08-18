@@ -1,4 +1,4 @@
-upload-widget {
+upload-csv {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -6,7 +6,7 @@ upload-widget {
     height: 100%;
 }
 
-upload-widget::part(container) {
+upload-csv::part(container) {
     padding: var(--unit);
     border: var(--dashed);
     border-radius: var(--radius);
@@ -18,15 +18,15 @@ upload-widget::part(container) {
     -webkit-backdrop-filter: var(--blur);
 }
 
-upload-widget::part(input) {
+upload-csv::part(input) {
     display: none;
 }
 
-upload-widget::part(progress-container) {
+upload-csv::part(progress-container) {
     background-color: #f0f0f0;
 }
 
-upload-widget::part(progress) {
+upload-csv::part(progress) {
     height: var(--sm);
     animation-duration: 3s;
     animation-name: width;
@@ -36,7 +36,7 @@ upload-widget::part(progress) {
     transition: width 0.5s;
 }
 
-upload-widget::part(progress-shadow) {
+upload-csv::part(progress-shadow) {
     background-image: linear-gradient(to bottom, hsl(210deg 10.53% 92.55% / 20%), transparent);
     height: 4em;
     position: absolute;

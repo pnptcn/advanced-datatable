@@ -7,13 +7,21 @@
         <link rel="stylesheet" href="./css/app.css" />
     </head>
     <body class="grid">
-        <header></header>
+        <header>
+            <button id="switch-view">Switch to Node Graph</button>
+            <button id="addNodeButton">Add Node</button>
+        </header>
         <aside></aside>
         <main>
-            <upload-widget></upload-widget>
-            <data-table></data-table>
-            <search-overlay></search-overlay>
+            <section id="table-view">
+                <upload-csv></upload-csv>
+                <data-table></data-table>
+            </section>
+            <section id="graph-view" style="display: none;">
+                <node-graph-editor></node-graph-editor>
+            </section>
         </main>
         <script type="module" src="./app.ts"></script>
+        <script type="module" src="./view.ts"></script>
     </body>
 </html>

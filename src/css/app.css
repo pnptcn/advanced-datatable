@@ -4,6 +4,7 @@
 @import url("./upload.css");
 @import url("./search.css");
 @import url("./datatable.css");
+@import url("./nodegraph.css")
 
 /* Search Overlay */
 #search-overlay {
