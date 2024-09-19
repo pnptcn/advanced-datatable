@@ -3,6 +3,8 @@
 import { Messaging } from './messaging/component';
 import Artifact, {ArtifactFactory} from './artifact';
 import Papa from 'papaparse';
+import * as aq from 'arquero';
+import type { ViewType } from '../view';
 
 class UploadComponent extends HTMLElement {
     private fileInput: HTMLInputElement;
@@ -11,6 +13,10 @@ class UploadComponent extends HTMLElement {
     private progressShadow: HTMLElement;
     private messagingChannel: MessageChannel;
     private port: MessagePort;
+    private navigationCallback: ((viewType: ViewType) => void) | null = null;
+    private messageFactories: {
+        data: typeof ArtifactFactory
+    }
 
     constructor() {
         super();
@@ -42,6 +48,13 @@ class UploadComponent extends HTMLElement {
         this.messagingChannel = new MessageChannel();
         this.port = this.messagingChannel.port1;
         this.port.start();
+        this.messageFactories = {
+            data: ArtifactFactory({ 
+                identity: "upload", 
+                channel: "data",
+                type: "application/json"
+            }),
+        }
     }
 
     connectedCallback() {
@@ -53,9 +66,9 @@ class UploadComponent extends HTMLElement {
     }
 
     setupMessaging() {
-        Messaging().subscribe("data", this.messagingChannel.port2);
+        Messaging().subscribe("upload", "data", this.messagingChannel.port2);
         this.port.onmessage = (event) => this.handleMessage(event.data);
-        console.debug('DataTable subscribed to "data" channel', 'DataTable');
+        console.debug('Upload subscribed to "data" channel', 'Upload');
     }
 
     handleMessage(data: any) {
@@ -93,34 +106,27 @@ class UploadComponent extends HTMLElement {
     parseFile(file: File) {
         this.showProgressBar();
         let headers: string[] = [];
-        let data: any[] = [];
+        const dataRows: any[] = [];
         let rowCount = 0;
+        const totalRows = 10000; // Estimate for progress bar, adjust as needed
 
         Papa.parse(file, {
+            header: true,
             worker: true,
             dynamicTyping: true,
-            step: (results: any, parser: any) => {
+            step: (results: Papa.ParseResult<any>, parser: Papa.Parser) => {
                 rowCount++;
-                const rowData = results.data as any[];
+                dataRows.push(results.data);
 
-                // If the row is empty (all values are null/undefined), skip it
-                if (rowData.every(value => value === null || value === undefined)) {
-                    return;
-                }
-
-                if (rowCount === 1) {
-                    headers = rowData;
-                } else {
-                    data.push(rowData);
-                }
-                const estimatedRows = Math.max(rowCount, 1000);
-                this.updateProgressBar((rowCount / estimatedRows) * 100);
+                this.updateProgressBar((rowCount / totalRows) * 100);
             },
-            complete: () => {
+            complete: (results: Papa.ParseResult<any>) => {
                 this.updateProgressBar(100);
-                console.debug(`File parsed: ${file.name}, ${rowCount} rows`, "Upload");
-                this.sendParsedData(headers, data);
+                const arqueroTable = aq.from(dataRows);
+                headers = results.meta.fields || [];
+                this.sendParsedData(headers, arqueroTable);
                 this.hideWidget();
+                this.handleUploadComplete();
             },
             error: (error: any) => {
                 console.error(`Error parsing file: ${error.message}`, "Upload");
@@ -128,31 +134,22 @@ class UploadComponent extends HTMLElement {
         });
     }
 
-    sendParsedData(headers: string[], data: any[]) {
-        console.debug(`Sending parsed data. Headers: ${headers.join(', ')}`, "Upload");
-        console.debug(`Data rows: ${data.length}`, "Upload");
-
+    sendParsedData(headers: string[], data: aq.Table) {
         if (this.messagingChannel) {
-            const formattedData = data.map(row => {
-                let rowObject: { [key: string]: any } = {};
-                headers.forEach((header, index) => {
-                    rowObject[header] = row[index];
-                });
-                return rowObject;
-            });
-
-            const msg = ArtifactFactory().get({
-                headers,
-                data: formattedData
-            }, 'upload', 'data', 'uploadComplete');
-
             try {
-                ArtifactFactory().validate(msg);
-                this.port.postMessage(msg);
-                console.debug('Parsed data sent on data channel', 'Upload');
+                this.port.postMessage(
+                    this.messageFactories.data.msg(
+                        "upload",
+                        "publisher",
+                        "load",
+                        {
+                            headers: headers,
+                            data: data
+                        }
+                    )
+                );
             } catch (error: any) {
                 console.error(`Failed to send parsed data: ${error.message}`, 'Upload');
-                console.error(`Failed message: ${JSON.stringify(msg)}`, 'Upload');
             }
         } else {
             console.error('Messaging channel not available, data not sent', 'Upload');
@@ -173,6 +170,16 @@ class UploadComponent extends HTMLElement {
         setTimeout(() => {
             this.style.display = "none";
         }, 500);
+    }
+
+    setNavigationCallback(callback: (viewType: ViewType) => void) {
+        this.navigationCallback = callback;
+    }
+
+    private handleUploadComplete() {
+        if (this.navigationCallback) {
+            this.navigationCallback('table');
+        }
     }
 }
 

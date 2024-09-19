@@ -1,28 +1,33 @@
-export interface ArtifactPayload {
-    [key: string]: any;
+import { 
+    type Artifact, 
+    type Channel, 
+    type Identity, 
+    type Role, 
+    type Scope, 
+    type Type 
+} from "../types/artifact";
+
+/*
+Props defines the immutable properties of an artifact factory.
+A component that needs to communicate on multiple channels, or dealing with multiple types,
+will need to create multiple artifact factories.
+*/
+export interface Props {
+    identity: Identity;
+    channel: Channel;
+    type: Type;
 }
 
-export interface Artifact {
-    uuid: string;
-    timestamp: number;
-    identity: string;
-    channel: string;
-    topic: string;
-    type: string;
-    role: string;
-    scope: string;
-    payload: ArtifactPayload;
-}
-
-export const ArtifactFactory = () => {
-    const get = (
-        payload: ArtifactPayload,
-        identity: string = "anonymous",
-        channel: string = "broadcast",
-        topic: string = "data",
-        type: string = "application/json",
-        role: string = "publisher",
-        scope: string = "import"
+/*
+ArtifactFactory is the only legitimate way to create messages, just as artifacts are the
+only legitimate way to facilitate inter-component communication.
+*/
+export const ArtifactFactory = ({ identity, channel, type }: Props) => {
+    const init = (
+        topic: string,
+        role: Role,
+        scope: Scope,
+        payload: any
     ): Artifact => {
         return {
             uuid: window.crypto.randomUUID(),
@@ -38,17 +43,24 @@ export const ArtifactFactory = () => {
     };
 
     const cmd = (
-        identity: string,
         topic: string,
-        scope: string,
-        payload: ArtifactPayload,
-        channel: string = "broadcast"
+        scope: Scope,
+        payload: any,
     ): Artifact => {
-        return get(payload, identity, channel, topic, "application/json", "command", scope);
+        return validate(init(topic, "publisher", scope, payload));
     };
 
-    const validate = (artifact: Artifact): boolean => {
-        const requiredKeys: (keyof Artifact)[] = [
+    const msg = (
+        topic: string,
+        role: Role, 
+        scope: Scope, 
+        payload: any
+    ) => {
+        return validate(init(topic, role, scope, payload));
+    }
+
+    const validate = (artifact: Artifact): Artifact => {
+        for (const key of [
             "uuid",
             "timestamp",
             "identity",
@@ -58,26 +70,16 @@ export const ArtifactFactory = () => {
             "role",
             "scope",
             "payload",
-        ];
-
-        for (const key of requiredKeys) {
-            if (!artifact[key]) {
+        ] as (keyof Artifact)[]) {
+            if (artifact[key] === undefined || artifact[key] === null) {
                 throw new Error(`${key} is missing or invalid`);
             }
         }
 
-        if (typeof artifact.uuid !== "string" || artifact.uuid.length === 0) {
-            throw new Error("Invalid UUID");
-        }
-
-        if (typeof artifact.timestamp !== "number" || artifact.timestamp <= 0) {
-            throw new Error("Invalid timestamp");
-        }
-
-        return true;
+        return artifact;
     };
 
-    return { get, cmd, validate };
+    return { msg, cmd, validate };
 };
 
 export default ArtifactFactory;
