@@ -3,6 +3,8 @@ import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { ForceDirectedLayout } from "./layouts/forcedirected"
 import { CircularLayout } from './layouts/circular';
 import { HierarchicalLayout } from './layouts/hierachical';
+import { MappingControl } from './controls/mapping';
+import type { NodeGroup } from './nodes/nodegroup';
 
 const graphData = {
     "nodes": [
@@ -16,12 +18,19 @@ const graphData = {
     ]
 };
 
+interface GraphNode {
+    node: NodeGroup;
+    outputs: GraphNode[];
+    inputs: GraphNode[];
+}
+
 class NodeGraphEditor extends HTMLElement {
     private scene: THREE.Scene;
     private camera: THREE.PerspectiveCamera;
     private renderer: THREE.WebGLRenderer;
     private labelRenderer: CSS2DRenderer;
     private root: THREE.Group;
+    private graphNodes: Map<NodeGroup, GraphNode> = new Map();
     private nodes: THREE.Group[] = [];
     private edges: THREE.Mesh[] = [];
     private draggedNode: THREE.Group | null = null;
@@ -31,32 +40,56 @@ class NodeGraphEditor extends HTMLElement {
     private isConnecting: boolean = false;
     private currentEdge: THREE.Line | null = null;
     private startPort: THREE.Mesh | null = null;
+    private dataTable: any = null;
+    private columnHeaders: string[] = [];
+    private messagingChannel: MessageChannel;
+    private port: MessagePort;
+    private onWindowResizeHandler = this.onWindowResize.bind(this);
+    private onPointerMoveHandler = this.onPointerMove.bind(this);
+    private onPointerDownHandler = this.onPointerDown.bind(this);
+    private onPointerUpHandler = this.onPointerUp.bind(this);
+    private onKeyDownHandler = this.onKeyDown.bind(this);
+    private is2DMode = false;
+    private orthographicCamera: THREE.OrthographicCamera;
+
 
     constructor() {
         super();
+        this.messagingChannel = new MessageChannel();
+        this.port = this.messagingChannel.port1;
+        this.port.start();
+        this.orthographicCamera = new THREE.OrthographicCamera(
+            window.innerWidth / -2, window.innerWidth / 2,
+            window.innerHeight / 2, window.innerHeight / -2,
+            1, 5000
+        );
+        this.orthographicCamera.position.set(0, 0, 1000);
+        this.orthographicCamera.lookAt(0, 0, 0);
         this.attachShadow({ mode: 'open' });
     }
 
     connectedCallback() {
         this.init();
-        window.addEventListener('resize', this.onWindowResize.bind(this));
-        window.addEventListener('pointermove', this.onPointerMove.bind(this));
-        window.addEventListener('pointerdown', this.onPointerDown.bind(this));
-        window.addEventListener('pointerup', this.onPointerUp.bind(this));
-        window.addEventListener('keydown', this.onKeyDown.bind(this));
+        window.addEventListener('resize', this.onWindowResizeHandler);
+        window.addEventListener('pointermove', this.onPointerMoveHandler);
+        window.addEventListener('pointerdown', this.onPointerDownHandler);
+        window.addEventListener('pointerup', this.onPointerUpHandler);
+        window.addEventListener('keydown', this.onKeyDownHandler);
 
         const addNodeButton = document.getElementById('addNodeButton');
         if (addNodeButton) {
             addNodeButton.addEventListener('click', () => this.addNewNode());
         }
+
+        this.setupMessaging();
     }
 
     disconnectedCallback() {
-        window.removeEventListener('resize', this.onWindowResize.bind(this));
-        window.removeEventListener('pointermove', this.onPointerMove.bind(this));
-        window.removeEventListener('pointerdown', this.onPointerDown.bind(this));
-        window.removeEventListener('pointerup', this.onPointerUp.bind(this));
-        window.removeEventListener('keydown', this.onKeyDown.bind(this));
+        window.removeEventListener('resize', this.onWindowResizeHandler);
+        window.removeEventListener('pointermove', this.onPointerMoveHandler);
+        window.removeEventListener('pointerdown', this.onPointerDownHandler);
+        window.removeEventListener('pointerup', this.onPointerUpHandler);
+        window.removeEventListener('keydown', this.onKeyDownHandler);
     }
 
     init() {
@@ -71,6 +104,35 @@ class NodeGraphEditor extends HTMLElement {
 
         this.animate();
     }
+
+    setupMessaging() {
+        Messaging().subscribe('nodegraph', 'data', this.messagingChannel.port2);
+        this.port.onmessage = (event) => {
+            this.handleMessage(event.data);
+        };
+    }
+
+    handleMessage(msg: any) {
+        if (msg.topic === 'uploadComplete') {
+            this.dataTable = msg.payload.data;
+            this.columnHeaders = msg.payload.headers;
+            // Create a data input node
+            this.addDataInputNode();
+        }
+    }
+
+    executeGraph() {
+        // Find input nodes (nodes with no inputs)
+        const inputNodes = Array.from(this.graphNodes.values()).filter(gn => gn.inputs.length === 0);
+        inputNodes.forEach(node => this.processNode(node, this.dataTable));
+    }
+    
+    processNode(graphNode: GraphNode, inputData: any) {
+        const outputData = graphNode.node.processData(inputData);
+        graphNode.outputs.forEach(outputNode => {
+            this.processNode(outputNode, outputData);
+        });
+    }    
 
     loadGraphFromJSON(graphData: any) {
         // Clear any existing nodes and edges
@@ -106,6 +168,15 @@ class NodeGraphEditor extends HTMLElement {
         });
 
         this.runLayout()
+    }
+
+    switchMode() {
+        this.is2DMode = !this.is2DMode;
+        if (this.is2DMode) {
+            this.camera = this.orthographicCamera;
+        } else {
+            this.camera = this.perspectiveCamera;
+        }
     }
 
     runLayout() {
@@ -214,6 +285,14 @@ class NodeGraphEditor extends HTMLElement {
         const nodeGroup = new THREE.Group();
         nodeGroup.position.copy(position);
 
+        if (configKey === 'remappingNode') {
+            // Create mapping control
+            const mappingControl = new MappingControl(this.columnHeaders);
+            // Add control to node's UI
+            // ...
+            nodeGroup.userData.control = mappingControl;
+        }
+
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
 
@@ -268,8 +347,20 @@ class NodeGraphEditor extends HTMLElement {
 
         nodeGroup.userData = { inputPort, outputPort };
 
+        if (configKey === 'dataInputNode') {
+            // Specific setup for data input node
+            // For example, display data source information
+        }
+
         return nodeGroup;
     }
+
+    addDataInputNode() {
+        const position = new THREE.Vector3(0, 0, 0);
+        const dataInputNode = this.createNode(position, 'Data Input', 'dataInputNode');
+        this.root.add(dataInputNode);
+        this.nodes.push(dataInputNode);
+    }    
 
     addNewNode() {
         const randomX = Math.random() * 800 - 400;

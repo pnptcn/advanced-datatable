@@ -3,6 +3,7 @@
 import { Messaging } from './messaging/component';
 import Artifact, {ArtifactFactory} from './artifact';
 import Papa from 'papaparse';
+import * as aq from 'arquero';
 import type { ViewType } from '../view';
 
 class UploadComponent extends HTMLElement {
@@ -105,33 +106,25 @@ class UploadComponent extends HTMLElement {
     parseFile(file: File) {
         this.showProgressBar();
         let headers: string[] = [];
-        let data: any[] = [];
+        const dataRows: any[] = [];
         let rowCount = 0;
+        const totalRows = 10000; // Estimate for progress bar, adjust as needed
 
         Papa.parse(file, {
+            header: true,
             worker: true,
             dynamicTyping: true,
-            step: (results: any, parser: any) => {
+            step: (results: Papa.ParseResult<any>, parser: Papa.Parser) => {
                 rowCount++;
-                const rowData = results.data as any[];
+                dataRows.push(results.data);
 
-                // If the row is empty (all values are null/undefined), skip it
-                if (rowData.every(value => value === null || value === undefined)) {
-                    return;
-                }
-
-                if (rowCount === 1) {
-                    headers = rowData;
-                } else {
-                    data.push(rowData);
-                }
-                const estimatedRows = Math.max(rowCount, 1000);
-                this.updateProgressBar((rowCount / estimatedRows) * 100);
+                this.updateProgressBar((rowCount / totalRows) * 100);
             },
-            complete: () => {
+            complete: (results: Papa.ParseResult<any>) => {
                 this.updateProgressBar(100);
-                console.debug(`File parsed: ${file.name}, ${rowCount} rows`, "Upload");
-                this.sendParsedData(headers, data);
+                const arqueroTable = aq.from(dataRows);
+                headers = results.meta.fields || [];
+                this.sendParsedData(headers, arqueroTable);
                 this.hideWidget();
                 this.handleUploadComplete();
             },
@@ -141,16 +134,8 @@ class UploadComponent extends HTMLElement {
         });
     }
 
-    sendParsedData(headers: string[], data: any[]) {
+    sendParsedData(headers: string[], data: aq.Table) {
         if (this.messagingChannel) {
-            const formattedData = data.map(row => {
-                let rowObject: { [key: string]: any } = {};
-                headers.forEach((header, index) => {
-                    rowObject[header] = row[index];
-                });
-                return rowObject;
-            });
-
             try {
                 this.port.postMessage(
                     this.messageFactories.data.msg(
@@ -159,7 +144,7 @@ class UploadComponent extends HTMLElement {
                         "load",
                         {
                             headers: headers,
-                            data: formattedData
+                            data: data
                         }
                     )
                 );

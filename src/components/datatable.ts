@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
 import * as echarts from 'echarts';
-import { table, Table as ArqueroTable } from 'arquero';
+import { table, Table as ArqueroTable, op } from 'arquero';
 import { Messaging } from './messaging/component';
 import { ArtifactFactory } from './artifact';
 
@@ -58,7 +58,7 @@ class DataTableComponent extends HTMLElement {
     }
 
     setupMessaging() {
-        Messaging().subscribe("datatable", "command", this.messagingChannel.port2);
+        Messaging().subscribe("datatable", "data", this.messagingChannel.port2);
         this.port.onmessage = (event) => {
             this.handleMessage(event.data);
         };
@@ -67,7 +67,7 @@ class DataTableComponent extends HTMLElement {
 
     handleMessage(msg: any) {
         try {
-            if (msg.topic === 'uploadComplete') {
+            if (msg.topic === 'upload') {
                 console.debug(`Data received: ${msg.payload.data.length} rows`, 'DataTable');
                 const originalHeaders = msg.payload.headers as string[];
 
@@ -104,24 +104,26 @@ class DataTableComponent extends HTMLElement {
     }
 
     binNumericData(data: number[]) {
-        const binnedData = data.reduce((acc, value) => {
-            let range: string;
-            if (value <= 1000) range = '0-1000';
-            else if (value <= 5000) range = '1001-5000';
-            else if (value <= 10000) range = '5001-10000';
-            else range = '>10000';
+        const min = Math.min(...data);
+        const max = Math.max(...data);
+        const binCount = 10; // You can adjust the number of bins
+        const binSize = (max - min) / binCount;
     
-            if (!acc[range]) acc[range] = 0;
-            acc[range]++;
-    
-            return acc;
-        }, {} as Record<string, number>);
-    
-        return Object.keys(binnedData).map(range => ({
-            label: range,
-            value: binnedData[range]
+        const bins = Array.from({ length: binCount }, (_, i) => ({
+            range: `${(min + i * binSize).toFixed(2)} - ${(min + (i + 1) * binSize).toFixed(2)}`,
+            count: 0,
         }));
-    }
+    
+        data.forEach(value => {
+            const binIndex = Math.min(Math.floor((value - min) / binSize), binCount - 1);
+            bins[binIndex].count++;
+        });
+    
+        return bins.map(bin => ({
+            label: bin.range,
+            value: bin.count,
+        }));
+    }    
     
     binDatetimeData(data: Date[]) {
         const binnedData = data.reduce((acc, date) => {
@@ -228,6 +230,20 @@ class DataTableComponent extends HTMLElement {
             console.error(`Failed to initialize chart for header "${sanitizedHeader}": ${error.message}`, 'DataTable');
         }
     }
+
+    calculateSummaryEfficientStatsForColumn(columnData: any[], columnType: string) {
+        const table = aq.from(columnData.map(value => ({ value })));
+        switch (columnType) {
+            case 'number':
+                const stats = table.rollup({
+                    min: d => op.min(d.value),
+                    max: d => op.max(d.value),
+                    mean: d => op.mean(d.value),
+                }).objects()[0];
+                return stats;
+            // Implement other cases similarly
+        }
+    }
     
     calculateSummaryStatsForColumn(columnData: any[], columnType: string) {
         switch (columnType) {
@@ -287,6 +303,97 @@ class DataTableComponent extends HTMLElement {
         if (nonNullData.every(value => typeof value === 'string' && this.isValidDate(value))) return 'datetime';
         return 'string';
     }
+
+    updateTableBodyColumn(sanitizedHeader: string, newColumnData: any[]) {
+        const columnIndex = this.sanitizedHeaders.indexOf(sanitizedHeader);
+        const rows = this.tbody.querySelectorAll('tr');
+    
+        rows.forEach((row, rowIndex) => {
+            const cells = row.querySelectorAll('td');
+            const cell = cells[columnIndex];
+            cell.textContent = newColumnData[rowIndex] !== undefined ? newColumnData[rowIndex] : '';
+        });
+    }    
+
+    changeColumnType(sanitizedHeader: string, newType: string) {
+        // Get the original column data
+        const columnData = this.arqueroTable!.array(sanitizedHeader);
+    
+        // Convert the data to the new type
+        let newColumnData;
+        switch (newType) {
+            case 'number':
+                newColumnData = columnData.map(value => Number(value));
+                break;
+            case 'string':
+                newColumnData = columnData.map(value => value !== null && value !== undefined ? String(value) : '');
+                break;
+            case 'boolean':
+                newColumnData = columnData.map(value => {
+                    if (typeof value === 'boolean') return value;
+                    if (typeof value === 'string') return value.toLowerCase() === 'true';
+                    if (typeof value === 'number') return value !== 0;
+                    return null;
+                });
+                break;
+            case 'datetime':
+                newColumnData = columnData.map(value => {
+                    const date = new Date(value);
+                    return isNaN(date.getTime()) ? null : date;
+                });
+                break;
+            default:
+                newColumnData = columnData;
+        }
+    
+        // Replace the column in the Arquero table
+        this.arqueroTable = this.arqueroTable!.assign({
+            [sanitizedHeader]: newColumnData
+        });
+    
+        // Recalculate summary statistics and update the header
+        const headerElement = this.shadowRoot!.querySelector(`#header-${sanitizedHeader}`) as HTMLElement;
+        if (headerElement) {
+            const summaryElement = headerElement.querySelector('dl[part="dl"]') as HTMLElement;
+            const columnType = newType;
+            const summaryStats = this.calculateSummaryStatsForColumn(newColumnData, columnType);
+    
+            let summaryDisplay = this.generateSummaryDisplay(summaryStats, columnType);
+    
+            summaryElement.innerHTML = `
+                <dt part="dt">Type</dt>
+                <dd part="dd">
+                    <select part="select">
+                        <option value="number" ${columnType === 'number' ? 'selected' : ''}>Numeric</option>
+                        <option value="string" ${columnType === 'string' ? 'selected' : ''}>String</option>
+                        <option value="boolean" ${columnType === 'boolean' ? 'selected' : ''}>Boolean</option>
+                        <option value="datetime" ${columnType === 'datetime' ? 'selected' : ''}>Datetime</option>
+                    </select>
+                </dd>
+                ${summaryDisplay}
+            `;
+        }
+    
+        // Update the chart
+        this.createMiniChart(sanitizedHeader);
+    
+        // Update the table body for the affected column
+        this.updateTableBodyColumn(sanitizedHeader, newColumnData);
+    }
+
+    sortTable(sanitizedHeader: string, direction: 'asc' | 'desc') {
+        this.arqueroTable = this.arqueroTable!.orderby(
+            direction === 'asc' ? aq.asc(sanitizedHeader) : aq.desc(sanitizedHeader)
+        );
+        this.renderTableBody(); // Re-render the table body
+    }        
+
+    filterTable(sanitizedHeader: string, query: string) {
+        this.arqueroTable = this.arqueroTable!.filter(
+            (d: any) => String(d[sanitizedHeader]).toLowerCase().includes(query)
+        );
+        this.renderTableBody(); // Re-render the table body
+    }    
 
     // Adjust the setTableData method
     setTableData(headerMapping: Record<string, string>) {
@@ -353,6 +460,8 @@ class DataTableComponent extends HTMLElement {
                     return `
                         <th id="header-${sanitizedHeader}" part="th">
                             ${headerMapping[sanitizedHeader]}
+                            <button class="sort-asc">↑</button>
+                            <button class="sort-desc">↓</button>
                             <dl part="dl">
                                 <dt part="dt">Type</dt>
                                 <dd part="dd">
@@ -366,11 +475,21 @@ class DataTableComponent extends HTMLElement {
                                 ${summaryDisplay}
                             </dl>
                             <div id="chart-${sanitizedHeader}" style="width: 100%; height: 50px;"></div>
+                            <input type="text" class="filter-input" placeholder="Filter...">
                         </th>
                     `;
                 }).join('')}
             </tr>
         `;
+
+        this.thead.querySelectorAll('select[part="select"]').forEach((selectElement) => {
+            selectElement.addEventListener('change', (event) => {
+                const select = event.target as HTMLSelectElement;
+                const sanitizedHeader = select.closest('th')!.id.replace('header-', '');
+                const newType = select.value;
+                this.changeColumnType(sanitizedHeader, newType);
+            });
+        });        
 
         this.tbody.innerHTML = validRows.map((row: any) => `
             <tr part="tr">
@@ -387,6 +506,28 @@ class DataTableComponent extends HTMLElement {
                 this.createMiniChart(sanitizedHeader);
             });
         });
+
+        this.thead.querySelectorAll('.sort-asc').forEach((button) => {
+            button.addEventListener('click', () => {
+                const sanitizedHeader = button.closest('th')!.id.replace('header-', '');
+                this.sortTable(sanitizedHeader, 'asc');
+            });
+        });
+        
+        this.thead.querySelectorAll('.sort-desc').forEach((button) => {
+            button.addEventListener('click', () => {
+                const sanitizedHeader = button.closest('th')!.id.replace('header-', '');
+                this.sortTable(sanitizedHeader, 'desc');
+            });
+        });
+
+        this.thead.querySelectorAll('.filter-input').forEach((input) => {
+            input.addEventListener('input', () => {
+                const sanitizedHeader = input.closest('th')!.id.replace('header-', '');
+                const query = input.value.toLowerCase();
+                this.filterTable(sanitizedHeader, query);
+            });
+        });    
     }
 }
 
